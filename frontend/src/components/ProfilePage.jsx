@@ -173,7 +173,7 @@ export default function ProfilePage({ profile = {}, onUpdateProfile, onBackToDas
         formData.append('user_email', profile.email);
       }
 
-      const res = await fetch('/api/profile/upload-image', {
+      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/profile/upload-image`, {
         method: 'POST',
         headers: {
           ...(profile?.email ? { 'x-user-email': profile.email } : {})
@@ -1553,7 +1553,7 @@ function EditProfileModal({ profile, onClose, onSave }) {
         uploadData.append('user_email', profile.email);
       }
 
-      const res = await fetch('/api/profile/upload-image', {
+      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/profile/upload-image`, {
         method: 'POST',
         headers: {
           ...(profile?.email ? { 'x-user-email': profile.email } : {})
