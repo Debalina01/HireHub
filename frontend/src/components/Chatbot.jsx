@@ -77,34 +77,31 @@ export default function Chatbot({ user }) {
         text: m.text
       }));
 
-    const endpoints = ['/api/chat', 'http://127.0.0.1:8000/api/chat'];
+    const endpoint = `${import.meta.env.VITE_API_BASE_URL}/api/chat`;
     let replyText = "I'm having trouble connecting right now. Please try again in a moment.";
 
-    for (const url of endpoints) {
-      try {
-        const response = await fetch(url, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'X-User-Email': activeEmail
-          },
-          body: JSON.stringify({
-            message: query,
-            history: historyPayload,
-            user_email: activeEmail
-          })
-        });
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'X-User-Email': activeEmail
+        },
+        body: JSON.stringify({
+          message: query,
+          history: historyPayload,
+          user_email: activeEmail
+        })
+      });
 
-        if (response.ok) {
-          const data = await response.json();
-          if (data && data.reply) {
-            replyText = data.reply;
-            break;
-          }
+      if (response.ok) {
+        const data = await response.json();
+        if (data && data.reply) {
+          replyText = data.reply;
         }
-      } catch {
       }
+    } catch {
     }
 
     const botMessage = {
