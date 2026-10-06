@@ -3,8 +3,7 @@ import {
   getAccountByEmail,
   saveOrUpdateAccount,
   verifyUserOtp,
-  resetUserPassword,
-  getAllAccountsList
+  resetUserPassword
 } from '../utils/userAccounts';
 
 const CAPTCHA_CHALLENGES = [
@@ -162,6 +161,33 @@ const renderStrengthMeter = (strength) => (
   </div>
 );
 
+const loadGoogleScript = () => {
+  return new Promise((resolve) => {
+    if (typeof window !== 'undefined' && window.google?.accounts?.oauth2) {
+      resolve(window.google);
+      return;
+    }
+    if (typeof document === 'undefined') {
+      resolve(null);
+      return;
+    }
+    const existing = document.querySelector('script[src="https://accounts.google.com/gsi/client"]');
+    if (existing) {
+      existing.addEventListener('load', () => resolve(window.google || null));
+      existing.addEventListener('error', () => resolve(null));
+      setTimeout(() => resolve(window.google || null), 1500);
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.defer = true;
+    script.onload = () => resolve(window.google || null);
+    script.onerror = () => resolve(null);
+    document.head.appendChild(script);
+  });
+};
+
 export default function Auth({ onLoginSuccess }) {
   const [view, setView] = useState('login');
 
@@ -202,14 +228,6 @@ export default function Auth({ onLoginSuccess }) {
   const [showResetPassword, setShowResetPassword] = useState(false);
   const [showResetConfirmPassword, setShowResetConfirmPassword] = useState(false);
   const [resetErrors, setResetErrors] = useState({});
-
-  const [isGoogleModalOpen, setIsGoogleModalOpen] = useState(false);
-  const [googleLoading, setGoogleLoading] = useState(false);
-  const [googleLoadingAccount, setGoogleLoadingAccount] = useState(null);
-  const [isAddingGoogleAccount, setIsAddingGoogleAccount] = useState(false);
-  const [customGoogleName, setCustomGoogleName] = useState('');
-  const [customGoogleEmail, setCustomGoogleEmail] = useState('');
-  const [customGoogleError, setCustomGoogleError] = useState('');
 
   const currentCaptcha = CAPTCHA_CHALLENGES[captchaIndex];
 
@@ -529,56 +547,85 @@ export default function Auth({ onLoginSuccess }) {
     setView('reset-success');
   };
 
-  const handleSelectGoogleAccount = (acc) => {
-    setGoogleLoading(true);
-    setGoogleLoadingAccount(acc);
-    setTimeout(() => {
-      setGoogleLoading(false);
-      setIsGoogleModalOpen(false);
-      const user = saveOrUpdateAccount({
-        name: acc.name,
-        email: acc.email,
-        verified: true,
-        isGoogle: true
+  const handleGoogleSignIn = async () => {
+    setLoginError('');
+    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+    if (!clientId) {
+      setLoginError('Google Sign-In is not configured. Please set VITE_GOOGLE_CLIENT_ID in your environment variables.');
+      return;
+    }
+
+    const google = await loadGoogleScript();
+    if (!google?.accounts?.oauth2) {
+      setLoginError('Google Sign-In service could not be loaded. Please check your connection and try again.');
+      return;
+    }
+
+    try {
+      const tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: clientId,
+        scope: 'openid email profile',
+        prompt: 'select_account',
+        callback: async (tokenResponse) => {
+          if (tokenResponse?.error) {
+            if (tokenResponse.error !== 'access_denied') {
+              setLoginError(tokenResponse.error_description || 'Google sign-in was cancelled or failed.');
+            }
+            return;
+          }
+
+          if (tokenResponse?.access_token) {
+            try {
+              const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+                headers: {
+                  Authorization: `Bearer ${tokenResponse.access_token}`
+                }
+              });
+
+              if (!res.ok) {
+                setLoginError('Failed to retrieve user profile from Google.');
+                return;
+              }
+
+              const profile = await res.json();
+              if (!profile?.email) {
+                setLoginError('No email returned by Google account.');
+                return;
+              }
+
+              const cleanEmail = profile.email.toLowerCase().trim();
+              const cleanName = profile.name || profile.given_name || 'Google User';
+              const cleanAvatar = profile.picture || '';
+
+              const user = saveOrUpdateAccount({
+                name: cleanName,
+                email: cleanEmail,
+                avatar: cleanAvatar,
+                verified: true,
+                isGoogle: true
+              });
+
+              onLoginSuccess(
+                user || {
+                  name: cleanName,
+                  email: cleanEmail,
+                  avatar: cleanAvatar,
+                  verified: true,
+                  isGoogle: true
+                },
+                rememberMe
+              );
+            } catch {
+              setLoginError('Error retrieving Google account data.');
+            }
+          }
+        }
       });
-      onLoginSuccess(
-        user || {
-          name: acc.name,
-          email: acc.email,
-          verified: true,
-          isGoogle: true
-        },
-        rememberMe
-      );
-    }, 650);
-  };
 
-  const handleCustomGoogleSubmit = (e) => {
-    e.preventDefault();
-    setCustomGoogleError('');
-
-    const name = customGoogleName.trim();
-    const email = customGoogleEmail.trim();
-
-    if (!name) {
-      setCustomGoogleError('Please enter your full name.');
-      return;
+      tokenClient.requestAccessToken({ prompt: 'select_account' });
+    } catch {
+      setLoginError('Failed to initialize Google Sign-In.');
     }
-    if (!email) {
-      setCustomGoogleError('Please enter your Google email.');
-      return;
-    }
-    if (!isValidEmail(email)) {
-      setCustomGoogleError('Please enter a valid email address.');
-      return;
-    }
-
-    handleSelectGoogleAccount({
-      name,
-      email,
-      avatarBg: '#EA4335',
-      initial: name[0].toUpperCase()
-    });
   };
 
   const signupStrength = getPasswordStrength(signupPassword);
@@ -851,12 +898,7 @@ export default function Auth({ onLoginSuccess }) {
                 <button
                   type="button"
                   className="btn-google"
-                  onClick={() => {
-                    setLoginError('');
-                    setIsAddingGoogleAccount(false);
-                    setCustomGoogleError('');
-                    setIsGoogleModalOpen(true);
-                  }}
+                  onClick={handleGoogleSignIn}
                 >
                   <svg width="18" height="18" viewBox="0 0 48 48">
                     <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
@@ -1264,126 +1306,6 @@ export default function Auth({ onLoginSuccess }) {
           </div>
         </div>
       </div>
-
-      {isGoogleModalOpen && (
-        <div className="google-modal-overlay" onClick={() => !googleLoading && setIsGoogleModalOpen(false)}>
-          <div className="google-modal-card" onClick={(e) => e.stopPropagation()}>
-            <div className="google-modal-header">
-              <div className="google-icon-wrap">
-                <svg width="24" height="24" viewBox="0 0 48 48">
-                  <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
-                  <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
-                  <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
-                  <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
-                </svg>
-              </div>
-              <h3 className="google-modal-title">Sign in with Google</h3>
-              <p className="google-modal-subtitle">Choose an account to continue to <strong>HireHub</strong></p>
-            </div>
-
-            {googleLoading ? (
-              <div className="google-loading-box">
-                <div className="google-spinner"></div>
-                <p className="google-loading-text">
-                  Signing in as <strong>{googleLoadingAccount?.name || 'Google User'}</strong>...
-                </p>
-                <span className="google-loading-sub">Connecting your account to HireHub</span>
-              </div>
-            ) : !isAddingGoogleAccount ? (
-              <>
-                <div className="google-account-list">
-                  {getAllAccountsList().map((acc, index) => (
-                    <button
-                      key={index}
-                      type="button"
-                      className="google-account-item"
-                      onClick={() => handleSelectGoogleAccount(acc)}
-                    >
-                      <div className="google-avatar" style={{ backgroundColor: acc.avatarBg }}>
-                        {acc.initial}
-                      </div>
-                      <div className="google-account-details">
-                        <span className="google-account-name">{acc.name}</span>
-                        <span className="google-account-email">{acc.email}</span>
-                      </div>
-                    </button>
-                  ))}
-
-                  <button
-                    type="button"
-                    className="google-add-account-btn"
-                    onClick={() => setIsAddingGoogleAccount(true)}
-                  >
-                    <div className="google-add-icon">
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                        <circle cx="12" cy="7" r="4"></circle>
-                      </svg>
-                    </div>
-                    <span>Use another Google account</span>
-                  </button>
-                </div>
-
-                <div className="google-modal-footer">
-                  <p className="google-disclaimer">
-                    To continue, Google will share your name, email address, and profile picture with HireHub.
-                  </p>
-                  <button
-                    type="button"
-                    className="btn-secondary google-cancel-btn"
-                    onClick={() => setIsGoogleModalOpen(false)}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </>
-            ) : (
-              <form onSubmit={handleCustomGoogleSubmit} className="google-custom-form">
-                {customGoogleError && (
-                  <span className="auth-field-error" style={{ marginBottom: '0.5rem' }}>
-                    {customGoogleError}
-                  </span>
-                )}
-                <div className="form-group">
-                  <label className="form-label">Google Account Name</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Debalina Roy"
-                    value={customGoogleName}
-                    onChange={(e) => setCustomGoogleName(e.target.value)}
-                    className="form-input auth-input"
-                    autoFocus
-                    required
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Google Email</label>
-                  <input
-                    type="email"
-                    placeholder="e.g. yourname@gmail.com"
-                    value={customGoogleEmail}
-                    onChange={(e) => setCustomGoogleEmail(e.target.value)}
-                    className="form-input auth-input"
-                    required
-                  />
-                </div>
-                <div className="google-form-actions">
-                  <button
-                    type="button"
-                    className="btn-secondary"
-                    onClick={() => setIsAddingGoogleAccount(false)}
-                  >
-                    Back to Accounts
-                  </button>
-                  <button type="submit" className="btn-primary">
-                    Connect Account
-                  </button>
-                </div>
-              </form>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

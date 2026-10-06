@@ -8,13 +8,6 @@ const DEFAULT_ACCOUNTS = {
     password: 'Password123!',
     verified: true,
     isGoogle: false
-  },
-  'debalina.dev@gmail.com': {
-    name: 'Debalina',
-    email: 'debalina.dev@gmail.com',
-    password: 'Password123!',
-    verified: true,
-    isGoogle: true
   }
 };
 
