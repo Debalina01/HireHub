@@ -187,7 +187,10 @@ export default function ProfilePage({ profile = {}, onUpdateProfile, onBackToDas
       }
 
       const data = await res.json();
-      const imageUrl = data.imageUrl || data.avatar;
+      let imageUrl = data.imageUrl || data.avatar;
+      if (imageUrl && imageUrl.startsWith('/')) {
+        imageUrl = `${import.meta.env.VITE_API_BASE_URL}${imageUrl}`;
+      }
       const originalFilename = file.name || data.originalFilename || 'profile-photo.jpg';
       if (imageUrl) {
         onUpdateProfile({
@@ -1567,7 +1570,10 @@ function EditProfileModal({ profile, onClose, onSave }) {
       }
 
       const data = await res.json();
-      const imageUrl = data.imageUrl || data.avatar;
+      let imageUrl = data.imageUrl || data.avatar;
+      if (imageUrl && imageUrl.startsWith('/')) {
+        imageUrl = `${import.meta.env.VITE_API_BASE_URL}${imageUrl}`;
+      }
       const originalName = file.name || data.originalFilename || 'profile-photo.jpg';
 
       if (imageUrl) {
