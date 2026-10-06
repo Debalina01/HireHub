@@ -1125,6 +1125,62 @@ export default function App() {
     });
   };
 
+  const handleExportReport = () => {
+    const headers = [
+      'Company',
+      'Role',
+      'Status',
+      'Applied Date',
+      'Location',
+      'Work Mode',
+      'Salary',
+      'Stage',
+      'Source',
+      'Response Date',
+      'Notes'
+    ];
+
+    const escapeCsvValue = (val) => {
+      if (val === null || val === undefined) return '';
+      const str = String(val);
+      if (/[",\n\r]/.test(str)) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    };
+
+    const list = Array.isArray(applications) ? applications : [];
+    const rows = list.map((app) => [
+      app.company || '',
+      app.role || '',
+      app.status || '',
+      app.appliedDate || '',
+      app.location || '',
+      app.workMode || '',
+      app.salary || '',
+      app.stage || '',
+      app.source || '',
+      app.responseDate || '',
+      app.notes || ''
+    ]);
+
+    const headerLine = headers.map(escapeCsvValue).join(',');
+    const rowLines = rows.map((row) => row.map(escapeCsvValue).join(','));
+    const csvContent = [headerLine, ...rowLines].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'hirehub-application-report.csv';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    showSuccess('Application summary exported as CSV successfully!');
+  };
+
   const handleOpenAddInterviewModal = () => {
     setEditingInterview(null);
     setTimeValidationError('');
@@ -1684,7 +1740,7 @@ export default function App() {
             </p>
           </div>
           <div className="hero-actions">
-            <button className="btn-secondary" onClick={() => showSuccess("Application summary exported as CSV successfully!")}>
+            <button className="btn-secondary" onClick={handleExportReport}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                 <polyline points="7 10 12 15 17 10"></polyline>
