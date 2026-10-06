@@ -23,12 +23,6 @@ except ImportError:
     pass
 
 try:
-    import cloudinary
-    import cloudinary.uploader
-except ImportError:
-    cloudinary = None
-
-try:
     from backend.database import (
         init_db, calculate_kpis_for_user, calculate_weekly_activity,
         calculate_analytics_for_user, calculate_status_breakdown_for_user, sync_frontend_data,
@@ -609,43 +603,30 @@ async def upload_profile_image_endpoint(
     if len(content) == 0:
         raise HTTPException(status_code=400, detail="Uploaded file is empty.")
 
-    cloud_name = os.getenv("CLOUDINARY_CLOUD_NAME")
-    api_key = os.getenv("CLOUDINARY_API_KEY")
-    api_secret = os.getenv("CLOUDINARY_API_SECRET")
-
-    if not cloudinary or not (cloud_name and api_key and api_secret):
-        raise HTTPException(
-            status_code=500,
-            detail="Persistent image storage is not configured. Please set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET."
-        )
-
-    cloudinary.config(
-        cloud_name=cloud_name,
-        api_key=api_key,
-        api_secret=api_secret,
-        secure=True
-    )
+    current_profile = get_profile_for_user_db(email) or {}
+    old_avatar = current_profile.get("avatar") or current_profile.get("profileImage") or ""
+    if old_avatar and "/uploads/profile-images/" in old_avatar:
+        old_filename = old_avatar.split("/uploads/profile-images/")[-1].split("?")[0].strip()
+        old_safe_filename = os.path.basename(old_filename)
+        if old_safe_filename:
+            old_filepath = os.path.join(PROFILE_IMAGES_DIR, old_safe_filename)
+            if os.path.exists(old_filepath) and os.path.isfile(old_filepath):
+                try:
+                    os.remove(old_filepath)
+                except Exception as err:
+                    print(f"Warning: Failed to delete previous avatar file {old_filepath}: {err}")
 
     original_filename = os.path.basename(file.filename or "profile-photo.jpg")
     safe_stem = re.sub(r"[^a-zA-Z0-9]", "_", email.split("@")[0])[:30]
     unique_id = uuid.uuid4().hex[:8]
-    public_id = f"user_{safe_stem}_{unique_id}"
+    saved_filename = f"user_{safe_stem}_{unique_id}{ext}"
+    saved_filepath = os.path.join(PROFILE_IMAGES_DIR, saved_filename)
 
-    try:
-        upload_result = cloudinary.uploader.upload(
-            content,
-            folder="hirehub/profile-images",
-            public_id=public_id,
-            overwrite=True,
-            resource_type="image"
-        )
-        file_url = upload_result.get("secure_url")
-        if not file_url:
-            raise RuntimeError("Cloudinary upload did not return a secure_url")
-    except Exception as err:
-        raise HTTPException(status_code=500, detail=f"Image upload failed: {str(err)}")
+    with open(saved_filepath, "wb") as f:
+        f.write(content)
 
-    current_profile = get_profile_for_user_db(email) or {}
+    file_url = f"/uploads/profile-images/{saved_filename}"
+
     current_profile["avatar"] = file_url
     current_profile["avatarOriginalFilename"] = original_filename
     if "profileImage" in current_profile:
