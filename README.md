@@ -80,12 +80,14 @@ HireHub/
 │   ├── main.py
 │   ├── requirements.txt
 │   └── uploads/
+│       └── profile-images/
 │
 ├── frontend/
 │   ├── public/
 │   ├── src/
 │   ├── index.html
 │   ├── package.json
+│   ├── package-lock.json
 │   └── vite.config.js
 │
 ├── .env.example
@@ -93,6 +95,7 @@ HireHub/
 ├── Procfile
 ├── requirements.txt
 └── README.md
+
 
 
 
