@@ -48,6 +48,7 @@ export function getAccountsMap() {
           };
         }
       }
+      localStorage.removeItem(DEMO_USER_KEY);
     }
   } catch (e) {}
 
@@ -97,10 +98,6 @@ export function saveOrUpdateAccount(accountData) {
   map[key] = updated;
   saveAccountsMap(map);
 
-  try {
-    localStorage.setItem(DEMO_USER_KEY, JSON.stringify(updated));
-  } catch (e) {}
-
   return updated;
 }
 
@@ -111,9 +108,6 @@ export function verifyUserOtp(email) {
   if (map[key]) {
     map[key].verified = true;
     saveAccountsMap(map);
-    try {
-      localStorage.setItem(DEMO_USER_KEY, JSON.stringify(map[key]));
-    } catch {}
     return true;
   }
   return false;
@@ -126,9 +120,6 @@ export function resetUserPassword(email, newPassword) {
   if (map[key]) {
     map[key].password = newPassword;
     saveAccountsMap(map);
-    try {
-      localStorage.setItem(DEMO_USER_KEY, JSON.stringify(map[key]));
-    } catch {}
     return true;
   }
   return false;

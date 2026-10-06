@@ -77,24 +77,31 @@ import { saveOrUpdateAccount } from './utils/userAccounts';
 import { useNotification } from './context/NotificationContext';
 import './App.css';
 
+function getValidStoredAuthUser() {
+  try {
+    const raw = sessionStorage.getItem('hirehubAuth') || localStorage.getItem('hirehubAuth');
+    if (!raw) return null;
+    const user = JSON.parse(raw);
+    if (user && typeof user === 'object' && user.email && typeof user.email === 'string') {
+      return user;
+    }
+  } catch (err) {
+    console.error('Error reading auth state:', err);
+  }
+  try {
+    localStorage.removeItem('hirehubAuth');
+    sessionStorage.removeItem('hirehubAuth');
+  } catch {}
+  return null;
+}
+
 export default function App() {
   const { showSuccess, showError, showWarning, showConfirm } = useNotification();
 
-  
-  const [currentUser, setCurrentUser] = useState(() => {
-    try {
-      const saved = localStorage.getItem('hirehubAuth') || sessionStorage.getItem('hirehubAuth');
-      return saved ? JSON.parse(saved) : null;
-    } catch {
-      return null;
-    }
-  });
+  const [currentUser, setCurrentUser] = useState(() => getValidStoredAuthUser());
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
-    try {
-      return !!(localStorage.getItem('hirehubAuth') || sessionStorage.getItem('hirehubAuth'));
-    } catch {
-      return false;
-    }
+    const initialUser = getValidStoredAuthUser();
+    return !!(initialUser && initialUser.email);
   });
   const loadedEmailRef = useRef(currentUser?.email || null);
 
@@ -177,25 +184,23 @@ export default function App() {
     if (currentUser?.email) {
       saveProfileForUser(currentUser.email, updatedProfile);
     }
-    if (updatedProfile.name !== currentUser?.name || updatedProfile.avatar !== currentUser?.avatar) {
+    if (currentUser?.email && (updatedProfile.name !== currentUser?.name || updatedProfile.avatar !== currentUser?.avatar)) {
       const updatedUser = {
         ...currentUser,
         name: updatedProfile.name || currentUser?.name,
         avatar: updatedProfile.avatar !== undefined ? updatedProfile.avatar : currentUser?.avatar
       };
       setCurrentUser(updatedUser);
-      if (currentUser?.email) {
-        saveOrUpdateAccount({
-          email: currentUser.email,
-          name: updatedProfile.name || currentUser?.name,
-          avatar: updatedProfile.avatar !== undefined ? updatedProfile.avatar : currentUser?.avatar
-        });
-      }
+      saveOrUpdateAccount({
+        email: currentUser.email,
+        name: updatedProfile.name || currentUser?.name,
+        avatar: updatedProfile.avatar !== undefined ? updatedProfile.avatar : currentUser?.avatar
+      });
       try {
-        if (localStorage.getItem('hirehubAuth')) {
-          localStorage.setItem('hirehubAuth', JSON.stringify(updatedUser));
-        } else if (sessionStorage.getItem('hirehubAuth')) {
+        if (sessionStorage.getItem('hirehubAuth')) {
           sessionStorage.setItem('hirehubAuth', JSON.stringify(updatedUser));
+        } else if (localStorage.getItem('hirehubAuth')) {
+          localStorage.setItem('hirehubAuth', JSON.stringify(updatedUser));
         }
       } catch (err) {
         console.error('Error syncing auth user:', err);
@@ -204,13 +209,14 @@ export default function App() {
   };
 
   const handleUpdateUser = (updates) => {
+    if (!currentUser?.email) return;
     const updatedUser = { ...currentUser, ...updates };
     setCurrentUser(updatedUser);
     try {
-      if (localStorage.getItem('hirehubAuth')) {
-        localStorage.setItem('hirehubAuth', JSON.stringify(updatedUser));
-      } else if (sessionStorage.getItem('hirehubAuth')) {
+      if (sessionStorage.getItem('hirehubAuth')) {
         sessionStorage.setItem('hirehubAuth', JSON.stringify(updatedUser));
+      } else if (localStorage.getItem('hirehubAuth')) {
+        localStorage.setItem('hirehubAuth', JSON.stringify(updatedUser));
       }
     } catch (err) {
       console.error('Error syncing user:', err);
@@ -269,6 +275,7 @@ export default function App() {
   };
 
   const handleLoginSuccess = (user, remember) => {
+    if (!user || !user.email) return;
     loadedEmailRef.current = user.email;
     setCurrentUser(user);
     setIsAuthenticated(true);
@@ -286,8 +293,10 @@ export default function App() {
     try {
       if (remember) {
         localStorage.setItem('hirehubAuth', JSON.stringify(user));
+        sessionStorage.removeItem('hirehubAuth');
       } else {
         sessionStorage.setItem('hirehubAuth', JSON.stringify(user));
+        localStorage.removeItem('hirehubAuth');
       }
     } catch (err) {
       console.error("Storage error:", err);
