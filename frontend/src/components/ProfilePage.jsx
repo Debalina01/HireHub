@@ -4,6 +4,14 @@ import { useNotification } from '../context/NotificationContext';
 import CompanyLogo from './CompanyLogo';
 import DatePicker from './DatePicker';
 
+const getAvatarSrc = (avatar) => {
+  if (!avatar) return '';
+  if (avatar.startsWith('/')) {
+    return `${import.meta.env.VITE_API_BASE_URL}${avatar}`;
+  }
+  return avatar;
+};
+
 export default function ProfilePage({ profile = {}, onUpdateProfile, onBackToDashboard, theme = 'dark' }) {
   const { showSuccess, showError, showWarning, showConfirm } = useNotification();
 
@@ -423,7 +431,7 @@ export default function ProfilePage({ profile = {}, onUpdateProfile, onBackToDas
               aria-expanded={showAvatarActions}
             >
               {profile.avatar ? (
-                <img src={profile.avatar} alt={profile.name} className="profile-avatar-img" />
+                <img src={getAvatarSrc(profile.avatar)} alt={profile.name} className="profile-avatar-img" />
               ) : (
                 <div className="profile-avatar-placeholder">{initials}</div>
               )}
@@ -1745,7 +1753,7 @@ function EditProfileModal({ profile, onClose, onSave }) {
                   <div className="modal-avatar-control-row">
                     <div className="modal-avatar-preview">
                       {previewAvatar ? (
-                        <img src={previewAvatar} alt="Preview" />
+                        <img src={getAvatarSrc(previewAvatar)} alt="Preview" />
                       ) : (
                         <span>{(formData.name || 'JS').split(' ').filter(Boolean).map(n => n[0]).join('').slice(0, 2).toUpperCase()}</span>
                       )}
